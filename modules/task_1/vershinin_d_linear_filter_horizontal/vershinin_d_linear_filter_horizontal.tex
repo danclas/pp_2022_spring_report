@@ -1,0 +1,1232 @@
+\documentclass{report}
+
+\usepackage[warn]{mathtext}
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{luainputenc}
+\usepackage[english, russian]{babel}
+\usepackage[pdftex]{hyperref}
+\usepackage{tempora}
+\usepackage[12pt]{extsizes}
+\usepackage{listings}
+\usepackage{color,colortbl} % Цвет
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{indentfirst}
+\usepackage{amsmath}
+\usepackage{cmap}
+
+\geometry{a4paper,top=2cm,bottom=2cm,left=2.5cm,right=1.5cm}
+\setlength{\parskip}{0.5cm}
+\setlist{nolistsep, itemsep=0.3cm,parsep=0pt}
+
+\usepackage{listings}
+\lstset{language=C++,
+        basicstyle=\footnotesize,
+		keywordstyle=\color{blue}\ttfamily,
+		stringstyle=\color{red}\ttfamily,
+		commentstyle=\color{green}\ttfamily,
+		morecomment=[l][\color{red}]{\#}, 
+		tabsize=4,
+		breaklines=true,
+  		breakatwhitespace=true,
+  		title=\lstname,       
+}
+
+\makeatletter
+\renewcommand\@biblabel[1]{#1.\hfil}
+\makeatother
+\renewcommand{\labelenumii}{\arabic{enumi}.\arabic{enumii}.}
+\definecolor{grey}{rgb}{0.57, 0.64, 0.69}
+
+\begin{document}
+
+\begin{titlepage}
+
+\begin{center}
+Министерство науки и высшего образования Российской Федерации
+\end{center}
+
+\begin{center}
+Федеральное государственное автономное образовательное учреждение высшего образования \\
+Национальный исследовательский Нижегородский государственный университет им. Н.И. Лобачевского
+\end{center}
+
+\begin{center}
+Институт информационных технологий, математики и механики
+\end{center}
+
+\vspace{4em}
+
+\begin{center}
+\textbf{\LargeОтчет по лабораторной работе} \\
+\end{center}
+\begin{center}
+\textbf{\Large«Линейная фильтрация изображений (горизонтальное разбиение). Ядро Гаусса 3x3.»} \\
+\end{center}
+
+\vspace{4em}
+
+\newbox{\lbox}
+\savebox{\lbox}{\hbox{text}}
+\newlength{\maxl}
+\setlength{\maxl}{\wd\lbox}
+\hfill\parbox{7cm}{
+\hspace*{5cm}\hspace*{-5cm}\textbf{Выполнил:} \\ студент группы 381906-2 \\ Вершинин Д. А. \\
+\\
+\hspace*{5cm}\hspace*{-5cm}\textbf{Проверил:}\\ доцент кафедры МОСТ, \\ кандидат технических наук \\ Сысоев А. В.\\
+}
+\vspace{\fill}
+
+\begin{center} Нижний Новгород \\ 2022 \end{center}
+
+\end{titlepage}
+
+\setcounter{page}{2}
+
+% Содержание
+\tableofcontents
+\newpage
+
+% Введение
+\section*{Введение}
+\addcontentsline{toc}{section}{Введение}
+\par Под фильтрацией изображения понимают операцию получения нового изображения такого же размера, что и исходное изображение. Одним из основных классов фильтров, используемых для обработки изображений, является \textit{линейный матричный фильтр}. Такой фильтр хорош тем, что позволяет рассматривать не отдельный пиксель, а группу пикселей, что гораздо полезнее в случае фильтрации изображений.
+\par В матричных фильтрах используется такие понятия как \textit{свёртка и ядро свёртки}. \textit{Ядро свёртки} представляет собой матрицу весов, которые используются в операции свёртки. \textit{Операция свёртки} представляет собой вычисление нового значения цвета пикселя, который расположен в центре ядра свёртки, как взвешенную сумму всех пикселей с весами из ядра свёртки.
+\par Одним из известных линейных матричных фильтров является \textit{фильтр Гаусса}. Он позволяет уменьшить шум в изображении путём его размытия. В нём используется нормальное распределение (также называемое Гауссовым распределением) для вычисления весов в ядре свёртки.
+\newpage
+
+% Постановка задачи
+\section*{Постановка задачи}
+\addcontentsline{toc}{section}{Постановка задачи}
+\par В данном лабораторной работе требуется реализовать последовательную версию и параллельные версии алгоритма линейной фильтрации изображения (в градациях серого) с помощью фильтра Гаусса, провести вычислительные эксперименты для сравнения времени работы алгоритмов. Также требуется провести тестирование работоспособности алгоритмов при помощи Google Test, продемонстрировать работу последовательного алгоритма на реальных изображениях, сделать выводы об эффективности реализованных алгоритмов.
+\par Параллельные алгоритмы должны быть реализованы при помощи технологий OpenMP, TBB.
+\newpage
+
+% Описание алгоритма
+\section*{Описание алгоритма}
+\addcontentsline{toc}{section}{Описание алгоритма}
+\par Алгоритм линейной фильтрации изображения в градациях серого с помощью фильтра Гаусса состоит из следующих шагов:
+\begin{enumerate}
+\item Инициализация ядра свёртки нормированными значениями функции Гаусса. Функция Гаусса в данном случае выглядит так: $$G(x,y) = \frac{1}{2 \pi \sigma^2}e^{-\frac{x^2+y^2}{2 \sigma^2}}$$
+\item Проход по пикселям изображения по горизонтали. Изобразить это можно так (жёлтым цветом обозначен текущий пиксель):
+
+$$\begin{tabular}{c|c|c|c}
+...  & ...  & ... & ... \\
+\hline
+... & \cellcolor{yellow}&  & ...  \\
+\hline
+... &  &  & ... \\
+\hline
+...  & ...  & ... & ... \\
+\end{tabular}$$
+После того как сделали шаг по горизонтали, следующим пикселем будет:
+$$ \begin{tabular}{c|c|c|c}
+	...  & ...  & ... & ... \\
+	\hline
+	... & & \cellcolor{yellow} & ...  \\
+	\hline
+	... &  &  & ... \\
+	\hline
+	...  & ...  & ... & ... \\
+\end{tabular}$$
+    \begin{enumerate}
+    \item Для каждого текущего пикселя с помощью операцию свёртки получаем новое значение цвета.
+    \item Новое значение цвета записывается вместо текущего значения цвета пикселя в копию изображения для того, чтобы не портить исходное изображение.
+    \end{enumerate}
+\end{enumerate}
+\par Отдельно требуется рассмотреть случай на границе изображения. Для того, чтобы размеры исходного изображения совпадали с размерами полученного изображение, необходимо доопределить исходное изображение какими-то значениями за его пределами.
+\par Иллюстрация проблемы ('-' означает, что никаких данных там нет; жёлтым обозначен текущий пиксель в верхнем левом углу изображения; серым обозначено то, каким образом наложится ядро свёртки (включая жёлтый пиксель)):
+$$\begin{tabular}{c|c|c|c}
+ - \cellcolor{grey} & - \cellcolor{grey} & - \cellcolor{grey} & - \\
+\hline
+- \cellcolor{grey} & \cellcolor{yellow}&  \cellcolor{grey} & ...  \\
+\hline
+- \cellcolor{grey} &\cellcolor{grey}  & \cellcolor{grey} & ... \\
+\hline
+-  & ...  & ... & ... \\
+\end{tabular}$$
+\par Для решения этой проблемы было решено дополнить исходное изображение нулями за его пределами. Теперь это будет выглядеть так:
+$$\begin{tabular}{c|c|c|c}
+0 \cellcolor{grey} & 0 \cellcolor{grey} & 0 \cellcolor{grey} & 0 \\
+\hline
+0 \cellcolor{grey} & \cellcolor{yellow}&  \cellcolor{grey} & ...  \\
+\hline
+0 \cellcolor{grey} &\cellcolor{grey}  & \cellcolor{grey} & ... \\
+\hline
+0  & ...  & ... & ... \\
+\end{tabular}$$
+\newpage
+
+% Описание схемы распараллеливания
+\section*{Описание схемы распараллеливания}
+\addcontentsline{toc}{section}{Описание схемы распараллеливания}
+\par Распараллеливание осуществляется с помощью распараллеливания цикла горизонтального прохода по изображению. В итоге получаем, что каждый создаваемый поток обрабатывает только некоторую горизонтальную область исходного изображения.
+
+\newpage
+
+% Описание программной реализации
+\section*{Описание программной реализации}
+\addcontentsline{toc}{section}{Описание программной реализации}
+Программа состоит из заголовочного файла linear\_filter\_horizontal.h и двух файлов исходного кода linear\_filter\_horizontal.сpp и main.cpp.
+\par В заголовочном файле находятся прототипы функций для последовательного и параллельных алгоритмов линейной фильтрации изображений.
+\par Функция для получения нормированного ядра свёртки с помощью функции Гаусса. Задаётся размер (радиус) ядра свёртки и $\sigma$ для функции Гаусса:
+\begin{lstlisting}
+std::vector<float> getGaussKernel(int radius, float sigma);
+\end{lstlisting}
+\par Функции для применения операции свёртки для текущего пикселя. Задаются координаты по $x$ и $y$ текущего пикселя, ширина и высота изображения, ядро свётки, радиус ядра свёртки, и само изображение:
+\begin{lstlisting}
+float calcNewPixColor(const int x, const int y, const int width,
+					  const int height, const std::vector<float>& kernel,
+                      int radius, const std::vector<float>& img);
+\end{lstlisting}
+\par Функция для последовательного алгоритма. Задаются ширина и высота изображения, ядро свёртки, и само изображение:
+\begin{lstlisting}
+std::vector<float> getSequentialOperations(const int width, const int height,
+                                           const std::vector<float>& kernel,
+                                           const std::vector<float>& img);
+\end{lstlisting}
+\par Функция для параллельного алгоритма (OpenMP версия). Задаются ширина и высота изображения, ядро свёртки, само изображение, и количество потоков:
+\begin{lstlisting}
+std::vector<float> getParallelOperations(const int width, const int height,
+                                         const std::vector<float>& kernel,
+                                         const std::vector<float>& img,
+                                         int num_th = 4);
+\end{lstlisting}
+Для распараллеливания цикла используется директива \textit{\#pragma omp for}.
+\par Функция для параллельного алгоритма (TBB версия). Задаются ширина и высота изображения, ядро свёртки, само изображение, и количество потоков:
+\begin{lstlisting}
+std::vector<float> getParallelOperations(const int width, const int height,
+                                         const std::vector<float>& kernel,
+                                         const std::vector<float>& img,
+                                         int num_th = 4);
+\end{lstlisting}
+Для распараллеливания цикла используется  шаблонная функция \textit{tbb::parallel\_for}. У неё два аргумента:
+\begin{enumerate}
+    \item Одномерное итерационное пространство \textit{tbb::blocked\_range}, которое задаёт диапазон от 0 до значения высоты изображения.
+	\item Лямбда-выражение, которое в качестве параметра получает часть итерационного пространства и выполняет вычисление нового значения цвета пикселя.
+\end{enumerate}
+\par В файле исходного кода linear\_filter\_horizontal.сpp содержится реализация функций, объявленных в заголовочном файле. В файле исходного кода main.cpp содержатся тесты для проверки корректности программы.
+
+\newpage
+
+% Подтверждение корректности
+\section*{Подтверждение корректности}
+\addcontentsline{toc}{section}{Описание программной реализации}
+Для подтверждения корректности работы данной программы с помощью фрэймфорка Google Test было разработано 6 тестов для каждой паралельной версии алгоритма. Для каждого параллельного алгоритма результаты, полученные с его помощью, сравниваются с результатми полученными последовательным алгоримтом. Так же были реализованы ещё 6 аналогичных тестов, но уже с замером времени работы параллельного и последовательного алгоритма и вычислением ускорения.
+\par Для последовательной версии были написаны тесты с вымышленным изображением, для которого можно было вручную вычислить новые значения цвета для каждого пикселя. Помимо этих тестов, была созданна программа для тестирования последовательного алгоритма на реальных изображениях. Визуализация осуществлялась с помощью средств библиотеки OpenCV. 
+\par Успешное прохождение всех тестов подтверждает корректность работы программы.
+\newpage
+
+% Результаты экспериментов
+\section*{Результаты экспериментов}
+\addcontentsline{toc}{section}{Результаты экспериментов}
+Вычислительные эксперименты для оценки эффективности работы параллельных алгоритмов проводились на ПК со следующими характеристиками:
+\begin{itemize}
+	\item Процессор: Intel(R) Core(TM) i5-6400, 2.7 ГГц (3.3 ГГц, в режиме Turbo) количество ядер: 4;
+	\item Оперативная память: 8 ГБ (DDR4), 2133 МГц;
+	\item Операционная система: Windows 10;
+\end{itemize}
+\par Эксперименты проводились на 4 потоках.
+\par Результаты экспериментов представлены в Таблице 1 и в Таблице 2.
+\begin{table}[!h]
+\caption{Результаты вычислительных экспериментов с использованием OpenMP}
+\centering
+\begin{tabular}{| p{2cm} | p{3cm} | p{4cm} | p{2cm} |}
+\hline
+Размеры изображения & Время работы последовательного алгоритма (в секундах) & Время работы параллельного алгоритма (в секундах) & Ускорение  \\[5pt]
+\hline
+128x128        & 0.00520       & 0.00256      & 2.03154       \\
+256x256        & 0.02031       & 0.00968      & 2.09848       \\
+512x512        & 0.09084       & 0.04520      & 2.00979       \\
+1024x1024        & 0.33055       & 0.12582      & 2.62712       \\
+1920x1080        & 0.61128       & 0.19532      & 3.12963       \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{table}[!h]
+\caption{Результаты вычислительных экспериментов с использованием TBB}
+\centering
+\begin{tabular}{| p{2cm} | p{3cm} | p{4cm} | p{2cm} |}
+\hline
+Размеры изображения & Время работы последовательного алгоритма (в секундах) & Время работы параллельного алгоритма (в секундах) & Ускорение  \\[5pt]
+\hline
+128x128        & 0.00632       & 0.00516      & 1.22425       \\
+256x256        & 0.02047       & 0.00858      & 2.38501       \\
+512x512        & 0.08572       & 0.03242      & 2.64359       \\
+1024x1024        & 0.33956       & 0.11709      & 2.90002       \\
+1920x1080        & 0.63824       & 0.18543      & 3.44202       \\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+% Выводы из результатов экспериментов
+\section*{Выводы из результатов экспериментов}
+\addcontentsline{toc}{section}{Выводы из результатов экспериментов}
+Проводя анализ полученных данных, можно сделать вывод, что обе параллельные версии работают быстрее, чем последовательная версия для всех изображений. Причём при увелечении размера изображения, ускорение от использования параллельной версии увеличивается. Также можно заметить, что в данном случае TBB версия работает чуть быстрее OpenMP версии.
+\newpage
+
+% Заключение
+\section*{Заключение}
+\addcontentsline{toc}{section}{Заключение}
+Таким образом, в рамках данной лабораторной работы были разработаны последовательный и параллельные алгоритмы линейной фильтрация изображений с использованием горизонтального разбиения. Проведенные тесты показали корректность реализованной программы, а проведенные эксперименты доказали эффективность параллельных алгоритмов по сравнению с последовательным.
+\newpage
+
+% Литература
+\section*{Литература}
+\addcontentsline{toc}{section}{Литература}
+\begin{enumerate}
+\item Е.В. Турлапов «Обработка изображений. Часть 2». URL: \newline \url{http://www.graph.unn.ru/rus/materials/CG/CG04_ImageProcessing2.pdf}. 
+\item Бутенко, В. В. Особенности применения фильтров обработки изображений перед поиском объектов на изображениях / В. В. Бутенко. — Текст : непосредственный // Технические науки: теория и практика : материалы III Междунар. науч. конф. (г. Чита, апрель 2016 г.). — Чита : Издательство Молодой ученый, 2016. — С. 1-3. — URL: \url{https://moluch.ru/conf/tech/archive/165/9629/} (дата обращения: 04.05.2022).
+\item Сысоев А.В. Параллельное программирование с использованием OpenMP. URL: \newline
+\url{https://cloud.unn.ru/s/RQMgkKLMq92cm6A}
+\item Мееров И.Б., Сысоев А.В., Сиднев А.А. Инструменты параллельного программирования для систем с общей памятью. Библиотека Intel Threading Building Blocks. URL: \newline
+\url{https://cloud.unn.ru/s/nS8EtaeH7N4XW7t}
+\end{enumerate} 
+\newpage
+
+% Приложение
+\section*{Приложение}
+\addcontentsline{toc}{section}{Приложение}
+\textbf{Последовательная версия}
+\newline
+\newline linear\_filter\_horizontal.h
+\begin{lstlisting}
+#ifndef MODULES_TASK_1_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+#define MODULES_TASK_1_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+
+#include <vector>
+
+std::vector<float> getGaussKernel(int radius, float sigma);
+float calcNewPixColor(const int x, const int y, const int width,
+                      const int height, const std::vector<float>& kernel,
+                      int radius, const std::vector<float>& img);
+std::vector<float> getSequentialOperations(const int width, const int height,
+                                           const std::vector<float>& kernel,
+                                           const std::vector<float>& img);
+
+#endif  // MODULES_TASK_1_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+\end{lstlisting}
+linear\_filter\_horizontal.cpp
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#define _USE_MATH_DEFINES
+#include "../../../modules/task_1/vershinin_d_linear_filter_horizontal/linear_filter_horizontal.h"
+#include <cmath>
+
+std::vector<float> getGaussKernel(int radius, float sigma) {
+	int size = 2 * radius + 1;
+	std::vector<float> res(size * size);
+	float norm = 0;
+	for (int x = -radius; x <= radius; x++)
+	for (int y = -radius; y <= radius; y++) {
+		int k = (x + radius) * size + (y + radius);
+		res[k] = 1 / (2 * M_PI * sigma * sigma) *
+		std::exp(-(x * x + y * y) / (2 * sigma * sigma));
+		norm += res[k];
+	}
+	
+	for (int i = 0; i < size * size; i++) {
+		res[i] /= norm;
+	}
+	
+	return res;
+}
+
+float calcNewPixColor(const int x, const int y, const int width,
+                      const int height, const std::vector<float>& kernel,
+                      int radius, const std::vector<float>& img) {
+	float color = 0;
+	
+	for (int i = -radius; i <= radius; i++)
+	for (int j = -radius; j <= radius; j++) {
+		int k = (i + radius) * (2 * radius + 1) + j + radius;
+		
+		// check not in border
+		if (x + j >= 0 && x + j < width && y + i >= 0 && y + i < height) {
+			int m = (y + i) * width + x + j;
+			color += img[m] * kernel[k];
+		}
+		
+		// check color
+	}
+	
+	if (color > 255) {
+		color = 255;
+	}
+	return color;
+}
+
+std::vector<float> getSequentialOperations(const int width, const int height,
+                                           const std::vector<float>& kernel,
+                                           const std::vector<float>& img) {
+	std::vector<float> res(width * height);
+	for (int y = 0; y < height; y++)
+	for (int x = 0; x < width; x++) {
+		int m = y * width + x;
+		float color = calcNewPixColor(x, y, width, height, kernel, 1, img);
+		res[m] = color;
+	}
+	
+	return res;
+}
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#include <gtest/gtest.h>
+#include <vector>
+#include "./linear_filter_horizontal.h"
+
+TEST(TestForFunctions, TestGetGaussKernel) {
+	std::vector<float> res = getGaussKernel(1, 1.5);
+	
+	ASSERT_NEAR(res[4], 0.147761, 0.001);
+}
+
+TEST(TestForFunctions, TestCalcNewPixColor_0_0) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	std::vector<float> img{0, 128, 255, 0, 128, 255, 0, 128, 255};
+	float color = calcNewPixColor(0, 0, 3, 3, kernel, 1, img);
+	
+	ASSERT_NEAR(color, 27.2716, 0.001);
+}
+
+TEST(TestForFunctions, TestCalcNewPixColor_0_1) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	std::vector<float> img{0, 128, 255, 0, 128, 255, 0, 128, 255};
+	float color = calcNewPixColor(0, 1, 3, 3, kernel, 1, img);
+	
+	ASSERT_NEAR(color, 39.3986, 0.001);
+}
+
+TEST(TestForFunctions, TestCalcNewPixColor_center) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	std::vector<float> img{0, 128, 255, 0, 128, 255, 0, 128, 255};
+	float color = calcNewPixColor(1, 1, 3, 3, kernel, 1, img);
+	
+	ASSERT_NEAR(color, 127.692, 0.001);
+}
+
+
+TEST(TestForFunctions, TestCalcNewPixColor_width_height) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	std::vector<float> img{0, 128, 255, 0, 128, 255, 0, 128, 255};
+	float color = calcNewPixColor(2, 2, 3, 3, kernel, 1, img);
+	
+	ASSERT_NEAR(color, 95.1219, 0.001);
+}
+
+TEST(TestForFunctions, TestGetSequentialOperations) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	std::vector<float> img{0, 128, 255, 0, 128, 255, 0, 128, 255};
+	
+	std::vector<float> res = getSequentialOperations(3, 3, kernel, img);
+	std::vector<float> res_check{27.2716, 88.3884, 95.1219, 39.3986, 127.692,
+		137.42,  27.2716, 88.3884, 95.1219};
+	
+	for (int i = 0; i < 9; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+\end{lstlisting}
+
+\textbf{OpenMP версия}
+\newline
+\newline linear\_filter\_horizontal.h
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#ifndef MODULES_TASK_2_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+#define MODULES_TASK_2_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+#include <vector>
+
+std::vector<float> getGaussKernel(int radius, float sigma);
+float calcNewPixColor(const int x, const int y, const int width,
+                      const int height, const std::vector<float>& kernel,
+                      int radius, const std::vector<float>& img);
+std::vector<float> getSequentialOperations(const int width, const int height,
+                                           const std::vector<float>& kernel,
+                                           const std::vector<float>& img);
+
+std::vector<float> getParallelOperations(const int width, const int height,
+                                         const std::vector<float>& kernel,
+                                         const std::vector<float>& img,
+                                         int num_th = 4);
+
+std::vector<float> getRandomImage(int width, int height);
+
+#endif  // MODULES_TASK_2_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+\end{lstlisting}
+linear\_filter\_horizontal.cpp
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#define _USE_MATH_DEFINES
+#include "../../../modules/task_2/vershinin_d_linear_filter_horizontal/linear_filter_horizontal.h"
+
+#include <omp.h>
+
+#include <cmath>
+#include <random>
+
+std::vector<float> getGaussKernel(int radius, float sigma) {
+	int size = 2 * radius + 1;
+	std::vector<float> res(size * size);
+	float norm = 0;
+	for (int x = -radius; x <= radius; x++)
+	for (int y = -radius; y <= radius; y++) {
+		int k = (x + radius) * size + (y + radius);
+		res[k] = 1 / (2 * M_PI * sigma * sigma) *
+		std::exp(-(x * x + y * y) / (2 * sigma * sigma));
+		norm += res[k];
+	}
+	
+	for (int i = 0; i < size * size; i++) {
+		res[i] /= norm;
+	}
+	
+	return res;
+}
+
+float calcNewPixColor(const int x, const int y, const int width,
+                      const int height, const std::vector<float>& kernel,
+                      int radius, const std::vector<float>& img) {
+	float color = 0;
+	
+	for (int i = -radius; i <= radius; i++)
+	for (int j = -radius; j <= radius; j++) {
+		int k = (i + radius) * (2 * radius + 1) + j + radius;
+		
+		// check not in border
+		if (x + j >= 0 && x + j < width && y + i >= 0 && y + i < height) {
+			int m = (y + i) * width + x + j;
+			color += img[m] * kernel[k];
+		}
+	}
+	
+	// check color
+	if (color > 255) {
+		color = 255;
+	}
+	return color;
+}
+
+std::vector<float> getSequentialOperations(const int width, const int height,
+                                           const std::vector<float>& kernel,
+                                           const std::vector<float>& img) {
+	std::vector<float> res(width * height);
+	for (int y = 0; y < height; y++)
+	for (int x = 0; x < width; x++) {
+		int m = y * width + x;
+		float color = calcNewPixColor(x, y, width, height, kernel, 1, img);
+		res[m] = color;
+	}
+	
+	return res;
+}
+
+std::vector<float> getRandomImage(int width, int height) {
+	std::random_device dev;
+	std::mt19937 gen(dev());
+	std::uniform_real_distribution<float> urd(0, 255);
+	std::vector<float> vec(width * height);
+	for (int i = 0; i < width * height; i++) {
+		vec[i] = urd(gen);
+	}
+	return vec;
+}
+
+std::vector<float> getParallelOperations(const int width, const int height,
+                                         const std::vector<float>& kernel,
+                                         const std::vector<float>& img,
+                                         int num_th) {
+	std::vector<float> res(width * height);
+	int m, x, y = 0;
+	float color = 0;
+	#pragma omp parallel private(y, x, m, color) num_threads(num_th)
+	{
+		#pragma omp for
+		for (y = 0; y < height; y++) {
+			for (x = 0; x < width; x++) {
+				m = y * width + x;
+				color = calcNewPixColor(x, y, width, height, kernel, 1, img);
+				res[m] = color;
+			}
+		}
+	}
+	return res;
+}
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#define _USE_MATH_DEFINES
+#include <gtest/gtest.h>
+#include <omp.h>
+
+#include <iostream>
+#include <vector>
+
+#include "./linear_filter_horizontal.h"
+
+TEST(OMP_TEST, TestGetParallelOperations_3x3) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 3;
+	int height = 3;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, TestGetParallelOperations_128x128) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 128;
+	int height = 128;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, TestGetParallelOperations_256x256) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 256;
+	int height = 256;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, DISABLED_TestGetParallelOperations_512x512) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 512;
+	int height = 512;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, DISABLED_TestGetParallelOperations_1024x1024) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1024;
+	int height = 1024;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, DISABLED_TestGetParallelOperations_1920x1080) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1920;
+	int height = 1080;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+// Test with time
+
+/*
+TEST(OMP_TEST, TestGetParallelOperations_3x3) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 3;
+	int height = 3;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	double t1, t2;
+	
+	t1 = omp_get_wtime();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	t1 = omp_get_wtime() - t1;
+	
+	t2 = omp_get_wtime();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	t2 = omp_get_wtime() - t2;
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, TestGetParallelOperations_128x128) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 128;
+	int height = 128;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	double t1, t2;
+	
+	t1 = omp_get_wtime();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	t1 = omp_get_wtime() - t1;
+	
+	t2 = omp_get_wtime();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	t2 = omp_get_wtime() - t2;
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, TestGetParallelOperations_256x256) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 256;
+	int height = 256;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	double t1, t2;
+	
+	t1 = omp_get_wtime();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	t1 = omp_get_wtime() - t1;
+	
+	t2 = omp_get_wtime();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	t2 = omp_get_wtime() - t2;
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, TestGetParallelOperations_512x512) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 512;
+	int height = 512;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	double t1, t2;
+	
+	t1 = omp_get_wtime();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	t1 = omp_get_wtime() - t1;
+	
+	t2 = omp_get_wtime();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	t2 = omp_get_wtime() - t2;
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, TestGetParallelOperations_1024x1024) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1024;
+	int height = 1024;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	double t1, t2;
+	
+	t1 = omp_get_wtime();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	t1 = omp_get_wtime() - t1;
+	
+	t2 = omp_get_wtime();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	t2 = omp_get_wtime() - t2;
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(OMP_TEST, TestGetParallelOperations_1920x1080) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1920;
+	int height = 1080;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	double t1, t2;
+	
+	t1 = omp_get_wtime();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	t1 = omp_get_wtime() - t1;
+	
+	t2 = omp_get_wtime();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	t2 = omp_get_wtime() - t2;
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+*/
+
+int main(int argc, char **argv) {
+	::testing::InitGoogleTest(&argc, argv);
+	return RUN_ALL_TESTS();
+}
+
+\end{lstlisting}
+
+\textbf{TBB версия}
+\newline
+\newline linear\_filter\_horizontal.h
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#ifndef MODULES_TASK_3_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+#define MODULES_TASK_3_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+#include <vector>
+
+std::vector<float> getGaussKernel(int radius, float sigma);
+float calcNewPixColor(const int x, const int y, const int width,
+                      const int height, const std::vector<float>& kernel,
+                      int radius, const std::vector<float>& img);
+std::vector<float> getSequentialOperations(const int width, const int height,
+                                           const std::vector<float>& kernel,
+                                           const std::vector<float>& img);
+
+std::vector<float> getParallelOperations(const int width, const int height,
+                                         const std::vector<float>& kernel,
+                                         const std::vector<float>& img,
+                                         int num_th = 4);
+
+std::vector<float> getRandomImage(int width, int height);
+
+#endif  // MODULES_TASK_3_VERSHININ_D_LINEAR_FILTER_HORIZONTAL_LINEAR_FILTER_HORIZONTAL_H_
+\end{lstlisting}
+linear\_filter\_horizontal.cpp
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#define _USE_MATH_DEFINES
+#include "../../../modules/task_3/vershinin_d_linear_filter_horizontal/linear_filter_horizontal.h"
+
+#include <tbb/tbb.h>
+
+#include <cmath>
+#include <random>
+
+std::vector<float> getGaussKernel(int radius, float sigma) {
+	int size = 2 * radius + 1;
+	std::vector<float> res(size * size);
+	float norm = 0;
+	for (int x = -radius; x <= radius; x++)
+	for (int y = -radius; y <= radius; y++) {
+		int k = (x + radius) * size + (y + radius);
+		res[k] = 1 / (2 * M_PI * sigma * sigma) *
+		std::exp(-(x * x + y * y) / (2 * sigma * sigma));
+		norm += res[k];
+	}
+	
+	for (int i = 0; i < size * size; i++) {
+		res[i] /= norm;
+	}
+	
+	return res;
+}
+
+float calcNewPixColor(const int x, const int y, const int width,
+                      const int height, const std::vector<float>& kernel,
+                      int radius, const std::vector<float>& img) {
+	float color = 0;
+	
+	for (int i = -radius; i <= radius; i++)
+	for (int j = -radius; j <= radius; j++) {
+		int k = (i + radius) * (2 * radius + 1) + j + radius;
+		
+		// check not in border
+		if (x + j >= 0 && x + j < width && y + i >= 0 && y + i < height) {
+			int m = (y + i) * width + x + j;
+			color += img[m] * kernel[k];
+		}
+	}
+	
+	// check color
+	if (color > 255) {
+		color = 255;
+	}
+	return color;
+}
+
+std::vector<float> getSequentialOperations(const int width, const int height,
+                                           const std::vector<float>& kernel,
+                                           const std::vector<float>& img) {
+	std::vector<float> res(width * height);
+	for (int y = 0; y < height; y++)
+	for (int x = 0; x < width; x++) {
+		int m = y * width + x;
+		float color = calcNewPixColor(x, y, width, height, kernel, 1, img);
+		res[m] = color;
+	}
+	
+	return res;
+}
+
+std::vector<float> getRandomImage(int width, int height) {
+	std::random_device dev;
+	std::mt19937 gen(dev());
+	std::uniform_real_distribution<float> urd(0, 255);
+	std::vector<float> vec(width * height);
+	for (int i = 0; i < width * height; i++) {
+		vec[i] = urd(gen);
+	}
+	return vec;
+}
+
+std::vector<float> getParallelOperations(const int width, const int height,
+                                         const std::vector<float>& kernel,
+                                         const std::vector<float>& img,
+                                         int num_th) {
+	std::vector<float> res(width * height);
+	tbb::task_scheduler_init init(num_th);
+	int grainsize = 1;
+	tbb::parallel_for(tbb::blocked_range<int>(0, height, grainsize),
+	[&](const tbb::blocked_range<int>& range) {
+		for (int y = range.begin(); y != range.end(); y++) {
+			for (int x = 0; x < width; x++) {
+				int m = y * width + x;
+				float color = calcNewPixColor(x, y, width, height, kernel,
+				1, img);
+				res[m] = color;
+			}
+		}
+	});
+	return res;
+}
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Vershinin Daniil
+#define _USE_MATH_DEFINES
+#include <gtest/gtest.h>
+#include <tbb/tbb.h>
+
+#include <iostream>
+#include <vector>
+
+#include "./linear_filter_horizontal.h"
+
+TEST(TBB_TEST, TestGetParallelOperations_3x3) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 3;
+	int height = 3;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, TestGetParallelOperations_128x128) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 128;
+	int height = 128;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, TestGetParallelOperations_256x256) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 256;
+	int height = 256;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, DISABLED_TestGetParallelOperations_512x512) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 512;
+	int height = 512;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, DISABLED_TestGetParallelOperations_1024x1024) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1024;
+	int height = 1024;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, DISABLED_TestGetParallelOperations_1920x1080) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1920;
+	int height = 1080;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+// Test with time
+
+/*
+TEST(TBB_TEST, TestGetParallelOperations_3x3) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 3;
+	int height = 3;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	tbb::tick_count t1_start = tbb::tick_count::now();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	tbb::tick_count t1_finish = tbb::tick_count::now();
+	
+	tbb::tick_count t2_start = tbb::tick_count::now();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	tbb::tick_count t2_finish = tbb::tick_count::now();
+	
+	double t1 = (t1_finish - t1_start).seconds();
+	double t2 = (t2_finish - t2_start).seconds();
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, TestGetParallelOperations_128x128) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 128;
+	int height = 128;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	tbb::tick_count t1_start = tbb::tick_count::now();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	tbb::tick_count t1_finish = tbb::tick_count::now();
+	
+	tbb::tick_count t2_start = tbb::tick_count::now();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	tbb::tick_count t2_finish = tbb::tick_count::now();
+	
+	double t1 = (t1_finish - t1_start).seconds();
+	double t2 = (t2_finish - t2_start).seconds();
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, TestGetParallelOperations_256x256) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 256;
+	int height = 256;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	tbb::tick_count t1_start = tbb::tick_count::now();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	tbb::tick_count t1_finish = tbb::tick_count::now();
+	
+	tbb::tick_count t2_start = tbb::tick_count::now();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	tbb::tick_count t2_finish = tbb::tick_count::now();
+	
+	double t1 = (t1_finish - t1_start).seconds();
+	double t2 = (t2_finish - t2_start).seconds();
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, TestGetParallelOperations_512x512) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 512;
+	int height = 512;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	tbb::tick_count t1_start = tbb::tick_count::now();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	tbb::tick_count t1_finish = tbb::tick_count::now();
+	
+	tbb::tick_count t2_start = tbb::tick_count::now();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	tbb::tick_count t2_finish = tbb::tick_count::now();
+	
+	double t1 = (t1_finish - t1_start).seconds();
+	double t2 = (t2_finish - t2_start).seconds();
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, TestGetParallelOperations_1024x1024) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1024;
+	int height = 1024;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	tbb::tick_count t1_start = tbb::tick_count::now();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	tbb::tick_count t1_finish = tbb::tick_count::now();
+	
+	tbb::tick_count t2_start = tbb::tick_count::now();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	tbb::tick_count t2_finish = tbb::tick_count::now();
+	
+	double t1 = (t1_finish - t1_start).seconds();
+	double t2 = (t2_finish - t2_start).seconds();
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+TEST(TBB_TEST, TestGetParallelOperations_1920x1080) {
+	std::vector<float> kernel = getGaussKernel(1, 1.5);
+	int width = 1920;
+	int height = 1080;
+	std::vector<float> img = getRandomImage(width, height);
+	
+	tbb::tick_count t1_start = tbb::tick_count::now();
+	std::vector<float> res_check =
+	getParallelOperations(width, height, kernel, img);
+	tbb::tick_count t1_finish = tbb::tick_count::now();
+	
+	tbb::tick_count t2_start = tbb::tick_count::now();
+	std::vector<float> res = getSequentialOperations(width, height, kernel, img);
+	tbb::tick_count t2_finish = tbb::tick_count::now();
+	
+	double t1 = (t1_finish - t1_start).seconds();
+	double t2 = (t2_finish - t2_start).seconds();
+	
+	std::cout << "paralel (t1): " << t1 << " seq (t2): " << t2
+	<< " t2/t1 :" << t2 / t1 << std::endl;
+	
+	for (int i = 0; i < width * height; i++) {
+		ASSERT_NEAR(res[i], res_check[i], 0.001);
+	}
+}
+
+int main(int argc, char **argv) {
+	::testing::InitGoogleTest(&argc, argv);
+	return RUN_ALL_TESTS();
+}
+*/
+
+\end{lstlisting}
+
+\end{document}
